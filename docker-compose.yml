@@ -11,12 +11,24 @@ services:
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
     restart: always
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      test:
+        [
+          "CMD",
+          "mosquitto_sub",
+          "-t",
+          "$$SYS/#",
+          "-C",
+          "1",
+          "-i",
+          "healthcheck",
+          "-W",
+          "3",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  postgres:
+  postgres-main:
     image: postgres:17
     environment:
       POSTGRES_USER: postgres
@@ -26,6 +38,68 @@ services:
       - "55432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./main-db.sql:/docker-entrypoint-initdb.d/init-user-db.sql
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres-shard-1:
+        condition: service_healthy
+      postgres-shard-2:
+        condition: service_healthy
+      postgres-shard-3:
+        condition: service_healthy
+
+  postgres-shard-1:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "55433:5432"
+    volumes:
+      - postgres_data_shard_1:/var/lib/postgresql/data
+      - ./shard1-db.sql:/docker-entrypoint-initdb.d/init-user-db.sql
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-shard-2:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "55434:5432"
+    volumes:
+      - postgres_data_shard_2:/var/lib/postgresql/data
+      - ./shard2-db.sql:/docker-entrypoint-initdb.d/init-user-db.sql
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-shard-3:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "55435:5432"
+    volumes:
+      - postgres_data_shard_3:/var/lib/postgresql/data
+      - ./shard3-db.sql:/docker-entrypoint-initdb.d/init-user-db.sql
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -36,24 +110,24 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "55672:5672"    # AMQP protocol port
-      - "55673:15672"  # Management UI port
+      - "55672:5672" # AMQP protocol port
+      - "55673:15672" # Management UI port
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: always
-  
+
   delta-helper:
     image: europe-west3-docker.pkg.dev/nano-green-1/public/backend-home-assignment-helper:latest
     environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/postgres
+      DATABASE_URL: postgres://postgres:postgres@postgres-main:5432/postgres
       MQTT_URL: mqtt://mosquitto:1883
       MQTT_USERNAME: admin
       MQTT_PASSWORD: admin
     depends_on:
-      postgres:
+      postgres-main:
         condition: service_healthy
       mosquitto:
         condition: service_healthy
@@ -62,4 +136,7 @@ volumes:
   mosquitto_data:
   mosquitto_log:
   postgres_data:
+  postgres_data_shard_1:
+  postgres_data_shard_2:
+  postgres_data_shard_3:
   rabbitmq_data:

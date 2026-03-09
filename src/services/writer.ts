@@ -41,7 +41,7 @@ const saveCarStateToDatabase = async () => {
   if (result.success) {
     console.log("Saving car state to database:", carStateDraftSnapshot);
     await postgres.executeQuery(
-      `INSERT INTO car_state (car_id, time, state_of_charge, latitude, longitude, gear, speed)
+      `INSERT INTO vehicle_state (car_id, time, state_of_charge, latitude, longitude, gear, speed)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         carStateDraftSnapshot.car_id,
